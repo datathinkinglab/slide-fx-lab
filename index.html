@@ -251,6 +251,27 @@ pre{margin-top:8px;background:#14161c;color:#e6e1d7;border-radius:10px;padding:1
   body.notes .viewport{right:0}
   .notes-panel{width:100%;top:auto;height:55%}
 }
+/* ---------- PDF button ---------- */
+.tools button.pdf{background:var(--accent);color:#fff;border-color:var(--accent)}
+.tools button.pdf:hover{background:#e64a28;border-color:#e64a28}
+
+/* ---------- print / PDF ---------- */
+@page{size:1600px 900px;margin:0}
+@media print{
+  html,body{height:auto;overflow:visible;background:#fff}
+  *,*::before,*::after{animation:none!important;transition:none!important;-webkit-print-color-adjust:exact;print-color-adjust:exact}
+  .top,.bottom,.notes-panel,.overview,.toast,.tag,.ctrl,#s7 .handle::after{display:none!important}
+  .viewport{position:static!important;right:0!important;display:block;overflow:visible}
+  .stage{position:static!important;transform:none!important;width:1600px;height:auto;border-radius:0;box-shadow:none;overflow:visible}
+  .slide{position:relative!important;opacity:1!important;visibility:visible!important;width:1600px;height:900px;overflow:hidden;break-after:page;page-break-after:always}
+  .slide:last-child{break-after:auto;page-break-after:auto}
+  .rise,.word>span,#s6 .waffle i,#s10 .ms .dot,#s10 .ms .txt{opacity:1!important;transform:none!important}
+  #s10 .tl b{transform:none!important}
+  #s9 mark{background-size:100% 36%!important}
+  #s8 .hb .f span,#line .area,#line .ann{opacity:1!important}
+  #s5 .card{opacity:1!important;transform:none!important}
+}
+
 @media (prefers-reduced-motion:reduce){
   *,*::before,*::after{animation-duration:.01s!important;animation-delay:0s!important;transition-duration:.01s!important}
 }
@@ -266,6 +287,7 @@ pre{margin-top:8px;background:#14161c;color:#e6e1d7;border-radius:10px;padding:1
     <button id="btnReplay" title="다시 재생">다시 재생<kbd>R</kbd></button>
     <button id="btnOverview" title="전체 보기">전체 보기<kbd>O</kbd></button>
     <button id="btnFull" title="전체 화면">전체 화면<kbd>F</kbd></button>
+    <button id="btnPdf" class="pdf" title="PDF로 저장">PDF 저장<kbd>P</kbd></button>
   </div>
 </header>
 
@@ -694,8 +716,11 @@ cv.width = 1600; cv.height = 900;
 let coverOn = false, t0c = 0;
 function drawCover(now) {
   if (!coverOn) return;
-  const t = (now - t0c) / 1000;
-  cx.clearRect(0, 0, 1600, 900);
+  drawCoverFrame((now - t0c) / 1000);
+  requestAnimationFrame(drawCover);
+}
+function drawCoverFrame(t) {
+  cx.fillStyle = '#101217'; cx.fillRect(0, 0, 1600, 900);
   for (let x = 0; x <= 1600; x += 32) for (let y = 0; y <= 900; y += 32) {
     const d = Math.sin(x * .006 + t * .9) + Math.cos(y * .008 - t * .7) + Math.sin((x + y) * .003 + t * .4);
     const v = (d + 3) / 6;
@@ -706,7 +731,6 @@ function drawCover(now) {
   const g = cx.createLinearGradient(0, 0, 1100, 0);
   g.addColorStop(0, 'rgba(16,18,23,.92)'); g.addColorStop(1, 'rgba(16,18,23,0)');
   cx.fillStyle = g; cx.fillRect(0, 0, 1600, 900);
-  requestAnimationFrame(drawCover);
 }
 
 /* ---------- S3: line ---------- */
@@ -941,6 +965,34 @@ $('#btnReplay').onclick = replay;
 $('#btnOverview').onclick = () => toggleOverview(true);
 $('#ovClose').onclick = () => toggleOverview(false);
 $('#btnFull').onclick = toggleFull;
+
+/* ---------- PDF export: 모든 효과를 최종 상태로 만든 뒤 인쇄 ---------- */
+function finalState() {
+  clearTimers(); setRacePlay(false); coverOn = false;
+  drawCoverFrame(3.2);
+  $$('[data-count]').forEach(el => { cancelAnimationFrame(el._raf); el.textContent = (+el.dataset.count).toFixed(+(el.dataset.dec || 0)); });
+  $('#s2 .meter b').style.width = '73%';
+  buildLine(); clearTimers();
+  const ln = $('#line .ln'); ln.style.transition = 'none'; ln.style.strokeDashoffset = 0;
+  $$('#line .ann').forEach(a => a.classList.add('show'));
+  raceT = 4; raceFrame(4);
+  scatterStep(3);
+  $$('#hbars .f').forEach(f => { f.style.transition = 'none'; f.style.width = (+f.dataset.v / 2.4 * 100) + '%'; });
+  $$('#rings .fg').forEach(f => { f.style.transition = 'none'; f.style.strokeDashoffset = C * (1 - f.dataset.v / 100); });
+  $('#ba').style.setProperty('--x', '50%');
+}
+function restoreAfterPrint() {
+  $$('#hbars .f, #rings .fg').forEach(f => f.style.transition = '');
+  go(cur, 'replay');
+}
+function exportPdf() {
+  if (window.self !== window.top) { toast('PDF 저장은 datathinkinglab.github.io/slide-fx-lab 에서 이용하세요'); return; }
+  toast('인쇄 창에서 대상: “PDF로 저장”을 선택하세요');
+  setTimeout(() => { try { window.print(); } catch (e) { toast('이 화면에서는 인쇄를 쓸 수 없습니다'); } }, 300);
+}
+addEventListener('beforeprint', finalState);
+addEventListener('afterprint', restoreAfterPrint);
+$('#btnPdf').onclick = exportPdf;
 document.addEventListener('fullscreenchange', () => setTimeout(fit, 100));
 
 addEventListener('keydown', e => {
@@ -954,6 +1006,7 @@ addEventListener('keydown', e => {
   else if (k === 'r') replay();
   else if (k === 'o') toggleOverview(!$('#overview').classList.contains('open'));
   else if (k === 'f') toggleFull();
+  else if (k === 'p' && !e.metaKey && !e.ctrlKey) exportPdf();
   else if (k === 'escape') toggleOverview(false);
   else if (/^[1-9]$/.test(k)) go(+k - 1);
 });
